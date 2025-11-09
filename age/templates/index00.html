@@ -1,0 +1,273 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>人脸年龄性别检测</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/css/bootstrap.min.css" rel="stylesheet">
+    <style>
+        .preview-container {
+            max-width: 800px;
+            margin: 20px auto;
+            text-align: center;
+        }
+        #imagePreview, #resultImage {
+            max-width: 100%;
+            max-height: 600px;
+            margin: 10px auto;
+        }
+        .webcam-container {
+            display: none;
+            max-width: 800px;
+            margin: 20px auto;
+            text-align: center;
+        }
+        #webcamVideo {
+            max-width: 100%;
+            margin: 10px auto;
+        }
+        .loading {
+            display: none;
+            margin: 20px auto;
+        }
+    </style>
+</head>
+<body>
+    <div class="container mt-5">
+        <h1 class="text-center mb-4">人脸年龄性别检测</h1>
+        
+        <!-- 模式选择按钮 -->
+        <div class="d-flex justify-content-center mb-4">
+            <div class="btn-group" role="group">
+                <button type="button" class="btn btn-primary active" id="imageMode">图片模式</button>
+                <button type="button" class="btn btn-primary" id="webcamMode">摄像头模式</button>
+            </div>
+        </div>
+
+        <!-- 图片上传部分 -->
+        <div id="imageUpload" class="text-center">
+            <div class="mb-3">
+                <input type="file" class="form-control" id="fileInput" accept="image/*">
+            </div>
+            <div class="preview-container">
+                <img id="imagePreview" style="display: none;">
+                <img id="resultImage" style="display: none;">
+            </div>
+            <div class="loading">
+                <div class="spinner-border text-primary" role="status">
+                    <span class="visually-hidden">处理中...</span>
+                </div>
+                <p>处理中，请稍候...</p>
+            </div>
+        </div>
+
+        <!-- 摄像头部分 -->
+        <div id="webcamContainer" class="webcam-container">
+            <video id="webcamVideo" autoplay playsinline></video>
+            <div class="mt-3">
+                <button class="btn btn-primary" id="startWebcam">开启摄像头</button>
+                <button class="btn btn-danger" id="stopWebcam" style="display: none;">关闭摄像头</button>
+            </div>
+        </div>
+    </div>
+
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.0.1/socket.io.js"></script>
+    <script>
+        let socket = null;
+        let isProcessing = false;
+        let processingInterval = null;
+
+        // 模式切换
+        document.getElementById('imageMode').addEventListener('click', function() {
+            this.classList.add('active');
+            document.getElementById('webcamMode').classList.remove('active');
+            document.getElementById('imageUpload').style.display = 'block';
+            document.getElementById('webcamContainer').style.display = 'none';
+            stopWebcam();
+        });
+
+        document.getElementById('webcamMode').addEventListener('click', function() {
+            this.classList.add('active');
+            document.getElementById('imageMode').classList.remove('active');
+            document.getElementById('imageUpload').style.display = 'none';
+            document.getElementById('webcamContainer').style.display = 'block';
+        });
+
+        // 图片上传预览
+        document.getElementById('fileInput').addEventListener('change', function(e) {
+            const file = e.target.files[0];
+            if (file) {
+                const reader = new FileReader();
+                reader.onload = function(e) {
+                    const preview = document.getElementById('imagePreview');
+                    preview.src = e.target.result;
+                    preview.style.display = 'block';
+                    document.getElementById('resultImage').style.display = 'none';
+                    
+                    // 自动上传并处理
+                    uploadAndProcess(file);
+                };
+                reader.readAsDataURL(file);
+            }
+        });
+
+        // 上传并处理图片
+        function uploadAndProcess(file) {
+            const formData = new FormData();
+            formData.append('file', file);
+
+            document.querySelector('.loading').style.display = 'block';
+
+            fetch('/upload', {
+                method: 'POST',
+                body: formData
+            })
+            .then(response => response.json())
+            .then(data => {
+                document.querySelector('.loading').style.display = 'none';
+                if (data.error) {
+                    alert(data.error);
+                    return;
+                }
+                const resultImage = document.getElementById('resultImage');
+                resultImage.src = data.result_url + '?t=' + new Date().getTime();
+                resultImage.style.display = 'block';
+                document.getElementById('imagePreview').style.display = 'none';
+            })
+            .catch(error => {
+                document.querySelector('.loading').style.display = 'none';
+                alert('上传失败: ' + error);
+            });
+        }
+
+        // WebSocket连接管理
+        function connectSocket() {
+            if (!socket || !socket.connected) {
+                socket = io();
+
+                socket.on('connect', () => {
+                    console.log('Connected to server');
+                });
+
+                socket.on('disconnect', () => {
+                    console.log('Disconnected from server');
+                });
+
+                socket.on('processed_frame', (processedFrame) => {
+                    isProcessing = false;
+                    const video = document.getElementById('webcamVideo');
+                    video.style.display = 'none';
+                    
+                    // 创建或获取用于显示处理后帧的图像元素
+                    let processedImage = document.getElementById('processedImage');
+                    if (!processedImage) {
+                        processedImage = document.createElement('img');
+                        processedImage.id = 'processedImage';
+                        processedImage.style.maxWidth = '100%';
+                        video.parentNode.insertBefore(processedImage, video);
+                    }
+                    processedImage.src = processedFrame;
+                });
+            }
+        }
+
+        // 摄像头控制
+        let stream = null;
+
+        document.getElementById('startWebcam').addEventListener('click', function() {
+            if (navigator.mediaDevices && navigator.mediaDevices.getUserMedia) {
+                navigator.mediaDevices.getUserMedia({ 
+                    video: { 
+                        width: { ideal: 640 },
+                        height: { ideal: 480 },
+                        facingMode: "user"  // 使用前置摄像头
+                    } 
+                })
+                .then(function(mediaStream) {
+                    stream = mediaStream;
+                    const video = document.getElementById('webcamVideo');
+                    video.srcObject = mediaStream;
+                    video.style.display = 'block';
+                    
+                    // 等待视频加载完成
+                    video.onloadedmetadata = function(e) {
+                        video.play();
+                        // 连接WebSocket
+                        connectSocket();
+                    
+                        // 开始定期发送帧
+                        processingInterval = setInterval(captureAndSendFrame, 100);  // 每100ms处理一帧
+                        
+                        document.getElementById('startWebcam').style.display = 'none';
+                        document.getElementById('stopWebcam').style.display = 'inline-block';
+                    };
+                })
+                .catch(function(error) {
+                    alert('无法访问摄像头: ' + error);
+                });
+            } else {
+                alert('您的浏览器不支持摄像头访问');
+            }
+        });
+
+        document.getElementById('stopWebcam').addEventListener('click', stopWebcam);
+
+        function stopWebcam() {
+            if (processingInterval) {
+                clearInterval(processingInterval);
+                processingInterval = null;
+            }
+            
+            if (stream) {
+                stream.getTracks().forEach(track => track.stop());
+                stream = null;
+                document.getElementById('webcamVideo').srcObject = null;
+                document.getElementById('startWebcam').style.display = 'inline-block';
+                document.getElementById('stopWebcam').style.display = 'none';
+            }
+            
+            // 隐藏处理后的图像
+            const processedImage = document.getElementById('processedImage');
+            if (processedImage) {
+                processedImage.style.display = 'none';
+            }
+            
+            // 断开WebSocket连接
+            if (socket) {
+                socket.disconnect();
+            }
+        }
+
+        function captureAndSendFrame() {
+            if (!stream || isProcessing) return;
+
+            const video = document.getElementById('webcamVideo');
+            if (video.videoWidth === 0 || video.videoHeight === 0) return;
+            
+            const canvas = document.createElement('canvas');
+            const context = canvas.getContext('2d');
+            
+            // 设置合适的捕获尺寸
+            canvas.width = 640;
+            canvas.height = 480;
+            
+            try {
+                // 将视频帧绘制到画布上，保持宽高比
+                const scale = Math.min(canvas.width / video.videoWidth, canvas.height / video.videoHeight);
+                const x = (canvas.width - video.videoWidth * scale) / 2;
+                const y = (canvas.height - video.videoHeight * scale) / 2;
+                
+                context.drawImage(video, 0, 0, video.videoWidth, video.videoHeight,
+                                x, y, video.videoWidth * scale, video.videoHeight * scale);
+                
+                const frame = canvas.toDataURL('image/jpeg', 0.8);  // 降低质量以提高传输速度
+                isProcessing = true;
+                socket.emit('frame', frame);
+            } catch (error) {
+                console.error('捕获帧出错:', error);
+                isProcessing = false;
+            }
+        }
+    </script>
+</body>
+</html>

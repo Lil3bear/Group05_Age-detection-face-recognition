@@ -1,0 +1,43 @@
+# Byte-compiled / optimized / DLL files
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Virtual environment
+.venv/
+venv/
+ENV/
+env/
+
+# System files
+.DS_Store
+Thumbs.db
+
+# Uploads and results
+age/uploads/
+uploads/
+
+# Models, weights, large data
+models/
+*.onnx
+*.pt
+*.pth
+
+# Logs
+*.log
+
+# IDE
+.idea/
+.vscode/
+
+# Python env settings
+pip-wheel-metadata/
+
+# Mac metadata
+*.DS_Store
+
+# Windows
+*.db
+
+# Jupyter
+.ipynb_checkpoints/
