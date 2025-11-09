@@ -1,6 +1,12 @@
 # Group05 Age-detection-face-recognition (local copy)
 
-这是你的本地项目副本，包含一个基于 Flask + InsightFace 的人脸年龄/性别检测示例。将此仓库推送到 GitHub 远程仓库前请注意：
+这是你的本地项目副本，包含一个基于 Flask + InsightFace 的人脸年龄/性别检测示例。
+
+快速链接：
+
+- 使用文档（中文）： `使用文档.md`
+
+将此仓库推送到 GitHub 远程仓库前请注意：
 
 - 请确保不上传大型模型文件（如 .onnx）或虚拟环境目录（已在 .gitignore 中列出）。
 - 推送到 GitHub 需要 SSH key 或 HTTPS + PAT 认证；如果你没有配置，请参考下面的“如何推送”部分。
