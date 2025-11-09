@@ -1,0 +1,8 @@
+flask
+flask-socketio
+eventlet
+numpy
+opencv-python
+pillow
+insightface
+onnxruntime
